@@ -18,11 +18,12 @@ A lightweight context-driven Q&A tool using ChromaDB and Llama 3.2 for local inf
 
 ## Installation
 ```bash
-git clone https://github.com/yourusername/your-repo-name.git
-cd your-repo-name
+git clone https://github.com/doeswork/my-brain.git
+cd my-brain
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+huggingface-cli login
 ```
 
 ## Usage
