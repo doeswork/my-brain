@@ -1,7 +1,6 @@
 # my_brain.py
 
 import os
-import argparse
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import SentenceTransformerEmbeddings
@@ -10,8 +9,13 @@ from langchain.docstore.document import Document as LC_Document
 
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 
+# where to stash all HF models
+cache_dir = "llm_models"
+os.makedirs(cache_dir, exist_ok=True)
+
+
 # 1) Load and split your .txt docs
-def build_vectorstore(context_dir, persist_dir="chroma_db"):
+def build_vectorstore(context_dir: str, persist_dir: str = "chroma_db"):
     docs = []
     for fn in os.listdir(context_dir):
         if fn.lower().endswith(".txt"):
@@ -28,61 +32,90 @@ def build_vectorstore(context_dir, persist_dir="chroma_db"):
         embedding=embedder,
         persist_directory=persist_dir
     )
-    # persistence is automatic in chroma 0.4.x+, so you can drop db.persist()
     return db
 
+
 # 2) Load your LLM once
-def load_llm(model_name="meta-llama/Llama-3.2-1b-instruct"):
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model     = AutoModelForCausalLM.from_pretrained(
-        model_name, torch_dtype="auto", device_map="auto"
+def load_llm(
+    model_name: str = "nvidia/Llama-3.1-Nemotron-Nano-4B-v1.1",
+    cache_dir: str = cache_dir
+):
+    # load tokenizer & model into our local cache_dir
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name,
+        cache_dir=cache_dir
     )
-    # **remove** device=0 here
+    tokenizer.pad_token_id = tokenizer.eos_token_id
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        cache_dir=cache_dir,
+        torch_dtype="auto",
+        device_map="auto"
+    )
+
+    # return a generation pipeline
     return pipeline(
         "text-generation",
         model=model,
         tokenizer=tokenizer,
-        return_full_text=False,
+        return_full_text=False
     )
 
-# 3) Answer a query
-def answer_query(db, llm, query, k=3):
+
+# 3) Answer a query (more conversational)
+def answer_query(db, llm, query: str, thinking: str, k: int = 3):
+    # retrieve top-k context chunks
     results = db.similarity_search(query, k=k)
     context = "\n\n".join(r.page_content for r in results)
 
-    prompt = f"""### Instruction:
-Use the following context to answer the question.
+    # build a conversational prompt
+    sys_prompt = (
+        "You are a friendly assistant. "
+        "Use a natural, conversational tone when answering. Make your response short and simple."
+    )
+    user_prompt = (
+        f"Here’s some context:\n{context}\n\n"
+        f"User’s question: {query}\n"
+        "Assistant:"
+    )
 
-Context:
-{context}
+    # assemble messages for Nemotron
+    messages = [
+        {"role": "system",  "content": sys_prompt},
+        {"role": "system",  "content": f"detailed thinking {thinking}"},
+        {"role": "user",    "content": user_prompt},
+    ]
 
-### Question:
-{query}
-
-### Response:"""
+    # choose sampling params
+    do_sample = (thinking == "on")
+    temp     = 0.7 if do_sample else 0.0
+    top_p    = 0.9 if do_sample else 1.0
 
     out = llm(
-        prompt,
-        max_new_tokens=200,
-        temperature=0.3,
-        top_p=0.95,
+        messages,
+        max_new_tokens=1024,
+        temperature=temp,
+        top_p=top_p,
         top_k=50,
-        do_sample=False,
+        do_sample=do_sample,
     )
+
     print(out[0]["generated_text"].strip())
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("query", help="Your question for the LLM")
-    args = parser.parse_args()
-
     # build (or reuse) the vectorstore
     VDB = build_vectorstore(context_dir="context")
 
-    # load the LLM
+    # load the LLM pipeline
     LLM = load_llm()
 
-    # ask!
-    answer_query(VDB, LLM, args.query)
+    # ask user whether to enable detailed thinking
+    resp = input("Enable detailed thinking mode? (yes/no): ").strip().lower()
+    thinking = "on" if resp.startswith("y") else "off"
 
-#python3 my-brain.py "what color is the sky?"
+    # ask for the actual question
+    query = input("Enter your question: ").strip()
+
+    # answer!
+    answer_query(VDB, LLM, query, thinking)

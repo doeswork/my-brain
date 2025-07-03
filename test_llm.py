@@ -1,33 +1,45 @@
-#pip install transformers accelerate
-#pip install torch --index-url https://download.pytorch.org/whl/cu121
-#login to Hugging Face
-    # pip install huggingface_hub
-    # huggingface-cli login
-
+import os
+import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 
-#model_name = "meta-llama/Llama-3.2-3b-instruct"
-model_name = "meta-llama/Llama-3.2-1b-instruct"
+# Directory where models will be cached/downloaded
+cache_dir = "llm_models"
+os.makedirs(cache_dir, exist_ok=True)
 
-# Load model and tokenizer
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", device_map="auto")
+# Choose the model you want
+model_name = "nvidia/Llama-3.1-Nemotron-Nano-4B-v1.1"
 
-# Define prompt
+# Load tokenizer and model, pointing cache_dir to llm_models/
+tokenizer = AutoTokenizer.from_pretrained(
+    model_name,
+    cache_dir=cache_dir
+)
+
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    cache_dir=cache_dir,
+    torch_dtype="auto",
+    device_map="auto"
+)
+
+# Define your prompt
 prompt = "What color is the sky?"
 
-# Set up inference pipeline
-llm = pipeline("text-generation", model=model, tokenizer=tokenizer)
+# Set up the pipeline
+llm = pipeline(
+    "text-generation",
+    model=model,
+    tokenizer=tokenizer
+)
 
-# Generate response
+# Generate a response
 response = llm(
     prompt,
     max_new_tokens=100,
-    temperature=0.3,    # lower temp → more deterministic
+    temperature=0.3,
     top_p=0.9,
     top_k=50,
     do_sample=True,
 )
 
-# Print output
 print("Assistant:", response[0]["generated_text"])
