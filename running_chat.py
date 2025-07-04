@@ -1,4 +1,4 @@
-# test_llm_loop.py — interactive streaming for Nemotron-Nano-4B
+# interactive streaming for Nemotron-Nano-4B or 8B
 
 import os
 import torch
@@ -14,11 +14,17 @@ def main():
     # 1) Prepare cache
     cache_dir = "llm_models"
     os.makedirs(cache_dir, exist_ok=True)
-    model_name = "nvidia/Llama-3.1-Nemotron-Nano-4B-v1.1"
 
-    # 2) Choose precision
-    choice = input("Load model in [8] 8-bit or [16] 16-bit FP16? (8/16): ").strip()
-    use_8bit = (choice == "8")
+    # 2) Choose model size
+    size_choice = input("Which model? [4] 4B or [8] 8B? (4/8): ").strip()
+    if size_choice == "8":
+        model_name = "nvidia/Llama-3.1-Nemotron-Nano-8B-v1"
+    else:
+        model_name = "nvidia/Llama-3.1-Nemotron-Nano-4B-v1.1"
+
+    # 2.1) Choose precision
+    bit_choice = input("Load model in [8] 8-bit or [16] 16-bit FP16? (8/16): ").strip()
+    use_8bit = (bit_choice == "8")
     quant_config = None
     if use_8bit:
         quant_config = BitsAndBytesConfig(
@@ -76,14 +82,26 @@ def main():
             },
             {"role": "user", "content": question},
         ]
-        
-        # 2) Turn them into token IDs
-        # The 'encoded' variable is the input_ids tensor directly.
-        input_ids = tokenizer.apply_chat_template(
+
+        # --- CORRECTED TOKENIZATION ---
+        # Step A: Create the formatted prompt string from the chat messages.
+        prompt = tokenizer.apply_chat_template(
             messages,
-            add_generation_prompt=True,
+            tokenize=False, # Make sure it returns a string
+            add_generation_prompt=True
+        )
+
+        # Step B: Tokenize the formatted string to get both input_ids and attention_mask.
+        encoded = tokenizer(
+            prompt,
             return_tensors="pt",
+            padding=True
         ).to(model.device)
+
+        input_ids = encoded["input_ids"]
+        attention_mask = encoded["attention_mask"]
+        # --- END OF CORRECTION ---
+
 
         # Set up streaming
         streamer = TextIteratorStreamer(
@@ -95,7 +113,7 @@ def main():
         # Launch generate in background
         gen_kwargs = dict(
             input_ids=input_ids,
-            # attention_mask is not needed here; model handles it
+            attention_mask=attention_mask, # Now we have the mask to pass in
             max_new_tokens=512,
             temperature=0.6 if thinking=="on" else 1.0,
             top_p=0.95 if thinking=="on" else 1.0,
