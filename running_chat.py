@@ -76,7 +76,7 @@ def main():
             {
               "role": "system",
               "content": (
-                  "You are Nemotron-Nano. Keep answers short (≤ 3 sentences). "
+                  "Keep answers short (≤ 3 sentences). "
                   f"detailed thinking {thinking}"
               )
             },
@@ -114,7 +114,7 @@ def main():
         gen_kwargs = dict(
             input_ids=input_ids,
             attention_mask=attention_mask, # Now we have the mask to pass in
-            max_new_tokens=512,
+            max_new_tokens=1024 if thinking == "on" else 256,
             temperature=0.6 if thinking=="on" else 1.0,
             top_p=0.95 if thinking=="on" else 1.0,
             do_sample=(thinking=="on"),
