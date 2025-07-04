@@ -1,3 +1,5 @@
+# test_llm.py and download to llm_models folder 
+
 import os
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
@@ -35,7 +37,7 @@ llm = pipeline(
 # Generate a response
 response = llm(
     prompt,
-    max_new_tokens=100,
+    max_new_tokens=256,
     temperature=0.3,
     top_p=0.9,
     top_k=50,
