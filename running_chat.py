@@ -1,5 +1,3 @@
-# interactive streaming for Nemotron-Nano-4B or 8B
-
 import os
 import torch
 from threading import Thread
@@ -23,14 +21,20 @@ def main():
         model_name = "nvidia/Llama-3.1-Nemotron-Nano-4B-v1.1"
 
     # 2.1) Choose precision
-    bit_choice = input("Load model in [8] 8-bit or [16] 16-bit FP16? (8/16): ").strip()
-    use_8bit = (bit_choice == "8")
+    bit_choice = input("Load in [4] 4-bit, [8] 8-bit or [16] 16-bit FP16? (4/8/16): ").strip()
     quant_config = None
-    if use_8bit:
+    if bit_choice == "4":
+        quant_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True
+        )
+    elif bit_choice == "8":
         quant_config = BitsAndBytesConfig(
             load_in_8bit=True,
-            bnb_8bit_compute_dtype=torch.float16,
+            bnb_8bit_compute_dtype=torch.float16
         )
+    # else: full FP16 (no quant_config)
 
     # 3) Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
@@ -42,14 +46,13 @@ def main():
 
     # 4) Load model once
     print("Loading model (this may take a minute)...")
-    if use_8bit:
+    if quant_config:
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
             cache_dir=cache_dir,
             quantization_config=quant_config,
             device_map="auto",
-            torch_dtype=torch.float16,
-            trust_remote_code=True,
+            trust_remote_code=True
         )
     else:
         model = AutoModelForCausalLM.from_pretrained(
@@ -57,7 +60,7 @@ def main():
             cache_dir=cache_dir,
             torch_dtype=torch.float16,
             device_map="auto",
-            trust_remote_code=True,
+            trust_remote_code=True
         )
     model.config.pad_token_id = tokenizer.eos_token_id
     print("Model loaded and ready!\n")
@@ -74,34 +77,28 @@ def main():
         # Build the full prompt
         messages = [
             {
-              "role": "system",
-              "content": (
-                  "Keep answers short (≤ 3 sentences). "
-                  f"detailed thinking {thinking}"
-              )
+                "role": "system",
+                "content": (
+                    "Keep answers short (≤ 3 sentences). "
+                    f"detailed thinking {thinking}"
+                )
             },
             {"role": "user", "content": question},
         ]
 
-        # --- CORRECTED TOKENIZATION ---
-        # Step A: Create the formatted prompt string from the chat messages.
+        # --- CHAT TEMPLATE + TOKENIZATION ---
         prompt = tokenizer.apply_chat_template(
             messages,
-            tokenize=False, # Make sure it returns a string
+            tokenize=False,
             add_generation_prompt=True
         )
-
-        # Step B: Tokenize the formatted string to get both input_ids and attention_mask.
         encoded = tokenizer(
             prompt,
             return_tensors="pt",
             padding=True
         ).to(model.device)
-
-        input_ids = encoded["input_ids"]
-        attention_mask = encoded["attention_mask"]
-        # --- END OF CORRECTION ---
-
+        input_ids = encoded.input_ids
+        attention_mask = encoded.attention_mask
 
         # Set up streaming
         streamer = TextIteratorStreamer(
@@ -110,29 +107,32 @@ def main():
             skip_special_tokens=True
         )
 
-        # Launch generate in background
+        # Generation kwargs
         gen_kwargs = dict(
             input_ids=input_ids,
-            attention_mask=attention_mask, # Now we have the mask to pass in
+            attention_mask=attention_mask,
             max_new_tokens=1024 if thinking == "on" else 256,
-            temperature=0.6 if thinking=="on" else 1.0,
-            top_p=0.95 if thinking=="on" else 1.0,
-            do_sample=(thinking=="on"),
+            temperature=0.6 if thinking == "on" else 1.0,
+            top_p=0.95 if thinking == "on" else 1.0,
+            do_sample=(thinking == "on"),
             eos_token_id=tokenizer.eos_token_id,
             pad_token_id=tokenizer.eos_token_id,
             repetition_penalty=1.1,
             no_repeat_ngram_size=2,
             streamer=streamer,
         )
+
+        # Launch generation in background
         thread = Thread(target=model.generate, kwargs=gen_kwargs)
         thread.start()
 
-        # Stream tokens as they come
+        # Stream tokens live
         print("Assistant: ", end="", flush=True)
         for token in streamer:
             print(token, end="", flush=True)
         thread.join()
         print("\n")
+
 
 if __name__ == "__main__":
     main()
