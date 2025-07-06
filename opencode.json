@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "provider": {
+    "openai": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "OpenAI-Compatible Local",
+      "options": {
+        "baseURL": "http://localhost:8080/v1"
+      },
+      "models": {
+        "Qwen/Qwen2.5-Coder-14B-Instruct": {
+          "name": "Qwen 2.5 Coder 14B (4bit)"
+        }
+      }
+    }
+  },
+
+  // pick the one model you exposed in /v1/models
+  "model": "openai/Qwen/Qwen2.5-Coder-14B-Instruct",
+
+  // optional UI settings
+  "theme": "opencode",
+  "autoupdate": true
+}
