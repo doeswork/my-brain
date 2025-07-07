@@ -1,6 +1,7 @@
 {
   "$schema": "https://opencode.ai/config.json",
 
+  // Define your local “OpenAI-compatible” provider
   "provider": {
     "openai": {
       "npm": "@ai-sdk/openai-compatible",
@@ -10,16 +11,19 @@
       },
       "models": {
         "Qwen/Qwen2.5-Coder-14B-Instruct": {
-          "name": "Qwen 2.5 Coder 14B (4bit)"
+          "name": "Qwen 2.5 Coder 7B (4bit)"
         }
       }
     }
   },
 
-  // pick the one model you exposed in /v1/models
-  "model": "openai/Qwen/Qwen2.5-Coder-14B-Instruct",
+  // Pick exactly the provider/model you exposed above
+  "model": "openai/Qwen/Qwen2.5-Coder-7B-Instruct",
 
-  // optional UI settings
+  // Turn OFF streaming so OpenCode waits for the full JSON rather than SSE
+  "stream": false,
+
+  // Optional UI tweaks
   "theme": "opencode",
   "autoupdate": true
 }

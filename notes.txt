@@ -1,0 +1,5 @@
+export LOCAL_ENDPOINT="http://localhost:8080/v1"
+
+source ~/.bashrc
+
+ls -l ~/.opencode/bin/opencode
